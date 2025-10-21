@@ -131,21 +131,16 @@ class UR10eTorqueEnv(gym.Env):
         self.log['tau'].append(self.data.ctrl[:self.nu].copy())
         self.log['x_rpy_deg'].append(rpy_deg)
 
-    def run_pd_tracking(self, q_des_traj, T_total, fixed_ee_goal=None):
+    def run_pd_tracking(self, q_des_traj, T_total, goal):
         t = 0.0
         i = 0
         while t < T_total - 1e-9:
             q_des = q_des_traj[min(i, len(q_des_traj) - 1)]
 
-            # # 🔹 목표 pose 계산 (관절 목표가 시간에 따라 변해도 자동 반영)
-            # x_des, xq_des_wxyz = self.fk_pose_from_q(q_des)
-
             # 🔹 목표 pose 선택: 고정 P2가 주어졌으면 그걸 사용, 아니면 q_des의 FK
-            if fixed_ee_goal is not None:
-                x_des = fixed_ee_goal['pos']
-                xq_des_wxyz = fixed_ee_goal['quat_wxyz']
-            else:
-                x_des, xq_des_wxyz = self.fk_pose_from_q(q_des)
+            x_des_log = goal['pos']
+            xq_des_wxyz_log = goal['quat_wxyz']
+            x_des, xq_des_wxyz = self.fk_pose_from_q(q_des)
 
             # 현재 pose
             x_cur = self.data.site_xpos[self.ee_site_id].copy()
@@ -155,10 +150,10 @@ class UR10eTorqueEnv(gym.Env):
             xq_cur_wxyz = np.array([quat_xyzw[3], quat_xyzw[0], quat_xyzw[1], quat_xyzw[2]])
 
             # ---- 🔹 오차 계산 ----
-            pos_err = np.linalg.norm(x_des - x_cur)
+            pos_err = np.linalg.norm(x_des_log - x_cur)
             # 쿼터니언 오차 (회전벡터 크기)
             q_cur_xyzw = np.array([quat_xyzw[0], quat_xyzw[1], quat_xyzw[2], quat_xyzw[3]])
-            q_des_xyzw = np.array([xq_des_wxyz[1], xq_des_wxyz[2], xq_des_wxyz[3], xq_des_wxyz[0]])
+            q_des_xyzw = np.array([xq_des_wxyz_log[1], xq_des_wxyz_log[2], xq_des_wxyz_log[3], xq_des_wxyz_log[0]])
             rot_err = R.from_quat(q_des_xyzw) * R.from_quat(q_cur_xyzw).inv()
             rot_angle = np.linalg.norm(rot_err.as_rotvec()) * 180 / np.pi  # deg 단위
             rpy_deg_des = R.from_quat(q_des_xyzw).as_euler('xyz', degrees=True)
@@ -168,11 +163,11 @@ class UR10eTorqueEnv(gym.Env):
                 print("=" * 90)
                 print(f"t = {t:6.3f} s")
                 print(f"Current Position : {x_cur[0]:8.4f}, {x_cur[1]:8.4f}, {x_cur[2]:8.4f} [m]")
-                print(f"Target  Position : {x_des[0]:8.4f}, {x_des[1]:8.4f}, {x_des[2]:8.4f} [m]")
+                print(f"Target  Position : {x_des_log[0]:8.4f}, {x_des_log[1]:8.4f}, {x_des_log[2]:8.4f} [m]")
                 print(f"Current Orientation (wxyz): "
                       f"{xq_cur_wxyz[0]:7.4f}, {xq_cur_wxyz[1]:7.4f}, {xq_cur_wxyz[2]:7.4f}, {xq_cur_wxyz[3]:7.4f}")
                 print(f"Target  Orientation (wxyz): "
-                      f"{xq_des_wxyz[0]:7.4f}, {xq_des_wxyz[1]:7.4f}, {xq_des_wxyz[2]:7.4f}, {xq_des_wxyz[3]:7.4f}")
+                      f"{xq_des_wxyz_log[0]:7.4f}, {xq_des_wxyz_log[1]:7.4f}, {xq_des_wxyz_log[2]:7.4f}, {xq_des_wxyz_log[3]:7.4f}")
                 print(f"→ pos_err = {pos_err * 1000:7.3f} mm, rot_err = {rot_angle:6.2f} deg")
                 print("=" * 90)
 
@@ -184,10 +179,10 @@ class UR10eTorqueEnv(gym.Env):
             self.render_and_record(t)
             self.log_state(t)
 
-            # 🔹 타겟 로깅
-            self.log['x_des'].append(x_des)
-            self.log['xquat_des'].append(xq_des_wxyz)
-            self.log['x_rpy_deg_des'].append(rpy_deg_des)  # 🔹 추가
+            #  타겟 로깅
+            self.log['x_des'].append(x_des_log)
+            self.log['xquat_des'].append(xq_des_wxyz_log)
+            self.log['x_rpy_deg_des'].append(rpy_deg_des)
 
         # numpy 변환
         for k in self.log:

@@ -55,29 +55,26 @@ if __name__ == "__main__":
     T_total = move_T + hold_T
     N_total = int(np.ceil(T_total / dt))
 
-    if USE_FIXED_P2:
-        q_traj = [q_goal.copy() for _ in range(N_total)]
-    else:
-        # 최소 jerk 5차 다항 보간으로 관절 궤적 생성
-        def minjerk(t, T):
-            s = t / T
-            s = np.clip(s, 0.0, 1.0)
-            return 10*s**3 - 15*s**4 + 6*s**5
+    # 최소 jerk 5차 다항 보간으로 관절 궤적 생성
+    def minjerk(t, T):
+        s = t / T
+        s = np.clip(s, 0.0, 1.0)
+        return 10*s**3 - 15*s**4 + 6*s**5
 
-        N_move = int(np.ceil(move_T / dt))
-        q_traj = []
-        for i in range(N_move):
-            t = (i+1) * dt
-            s = minjerk(t, move_T)
-            q_t = (1-s) * q_init + s * q_goal
-            q_traj.append(q_t)
-        for _ in range(int(np.ceil(hold_T/dt))):
-            q_traj.append(q_goal.copy())
+    N_move = int(np.ceil(move_T / dt))
+    q_traj = []
+    for i in range(N_move):
+        t = (i+1) * dt
+        s = minjerk(t, move_T)
+        q_t = (1-s) * q_init + s * q_goal
+        q_traj.append(q_t)
+    for _ in range(int(np.ceil(hold_T/dt))):
+        q_traj.append(q_goal.copy())
 
     # 실행
     # log = env.run_pd_tracking(q_traj, T_total=move_T+hold_T)
-    fixed_ee_goal = {'pos': p_goal, 'quat_wxyz': q_goal_wxyz} if USE_FIXED_P2 else None
-    log = env.run_pd_tracking(q_traj, T_total=T_total, fixed_ee_goal=fixed_ee_goal)
+    goal = {'pos': p_goal, 'quat_wxyz': q_goal_wxyz}
+    log = env.run_pd_tracking(q_traj, T_total=T_total, goal=goal)
     vw.close()
 
     # 로그 저장

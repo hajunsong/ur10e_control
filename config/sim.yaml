@@ -42,4 +42,3 @@ demo:
   hold_duration: 1.0 # 도달 후 유지 시간 [s]
   video_path: "ur10e_demo.mp4"
   log_path: "logs/run1.npz"
-  use_fixed_p2: true
