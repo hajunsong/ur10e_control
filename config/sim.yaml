@@ -1,0 +1,45 @@
+# 시뮬레이션 및 제어 파라미터
+mujoco_xml: "/home/keti/Project/12_FieldSensor/ur10e_torque/assets/ur10e/scene.xml" # menagerie의 UR10e scene.xml 경로
+end_effector_site: "ee_site" # 말단 Site 이름(모델에 맞게 확인 후 수정)
+torso_body: "base" # 월드 고정 기준이 되는 바디명(필요시 사용)
+control_hz: 250 # 제어 주기 [Hz]
+sim_substeps: 1 # mj_step substep (필요시 조정)
+render_hz: 60 # 영상 저장 프레임레이트 [Hz]
+
+
+# 초기 관절각 (rad)
+q0: [0.0, -1.57, 1.57, -1.57, -1.57, 0.0]
+
+
+# 목표 말단 자세 P2
+# 위치 [m], 자세는 쿼터니언 [w,x,y,z]
+P2:
+  pos: [-0.85, -0.20, 0.45]
+  quat: [-0.5, 0.5, 0.5, -0.5]
+
+
+# IK(역기구학) 설정
+ik:
+  max_iters: 200
+  pos_tol: 1.0e-4
+  rot_tol: 1.0e-3
+  step_size: 0.6 # DLS 스텝 스케일
+  damping: 1.0e-3 # DLS 람다^2
+  dt_limit: 0.05 # joint delta 제한(rad)
+
+
+# 토크 제어기 설정 (PD + 중력보상)
+ctrl:
+  kp: [150, 150, 120, 80, 60, 40]
+  kd: [8, 8, 6, 4, 3, 2]
+  torque_limit: [150, 150, 100, 60, 40, 40] # UR10e 정격 참고, 시뮬 안정 위해 보수적 제한
+  use_gravity_comp: true
+
+
+# 데모 러닝타임
+demo:
+  move_duration: 4.0 # P1->P2 이동 시간 [s]
+  hold_duration: 1.0 # 도달 후 유지 시간 [s]
+  video_path: "ur10e_demo.mp4"
+  log_path: "logs/run1.npz"
+  use_fixed_p2: true

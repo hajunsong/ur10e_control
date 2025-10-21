@@ -1,0 +1,7 @@
+gymnasium>=0.29
+mujoco>=3.2
+imageio>=2.34
+matplotlib>=3.8
+numpy>=1.26
+scipy>=1.11
+yamlreader>=3.0

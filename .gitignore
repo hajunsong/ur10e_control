@@ -1,0 +1,4 @@
+.venv
+logs
+figures
+*.mp4
