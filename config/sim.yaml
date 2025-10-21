@@ -1,5 +1,5 @@
 # 시뮬레이션 및 제어 파라미터
-mujoco_xml: "/home/keti/Project/12_FieldSensor/ur10e_torque/assets/ur10e/scene.xml" # menagerie의 UR10e scene.xml 경로
+mujoco_xml: "/home/keti/ur10e_control/assets/ur10e/scene.xml" # menagerie의 UR10e scene.xml 경로
 end_effector_site: "ee_site" # 말단 Site 이름(모델에 맞게 확인 후 수정)
 torso_body: "base" # 월드 고정 기준이 되는 바디명(필요시 사용)
 control_hz: 250 # 제어 주기 [Hz]
