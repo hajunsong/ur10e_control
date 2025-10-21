@@ -127,6 +127,12 @@ class UR10eRLEnv(gym.Env):
     def step(self, action):
         action = np.asarray(action, dtype=float)
         u = np.clip(action, -1.0, 1.0) * self.task.action_scale
+
+        self.data.qvel[:] = 0.0  # 코리올리 제외(=순수 중력)
+        mujoco.mj_rne(self.model, self.data, 0, self.data.qfrc_inverse)
+        tau = self.data.qfrc_inverse[:self.nu].copy()
+
+        u = u + tau
         u = np.clip(u, -self.torque_limit, self.torque_limit)
 
         # 한 컨트롤 스텝 동안 물리 스텝
