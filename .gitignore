@@ -2,3 +2,6 @@
 logs
 figures
 *.mp4
+tb
+checkpoints
+.idea
