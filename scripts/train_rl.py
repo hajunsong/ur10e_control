@@ -6,11 +6,13 @@ from envs.ur10e_rl_env import UR10eRLEnv, RLTaskCfg
 from utils.math_utils import wxyz_to_xyzw, xyzw_to_wxyz
 from stable_baselines3 import SAC
 from stable_baselines3.common.monitor import Monitor
-from stable_baselines3.common.vec_env import SubprocVecEnv
+from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv
 import multiprocessing as mp
 import math
+from stable_baselines3.common.callbacks import CallbackList, EvalCallback, CheckpointCallback
+from callbacks.progress_bar import ProgressBarCallback
 
-def make_env(rank, base_seed=42):
+def make_env(rank, cfg, base_seed=42):
     def _init():
         # 고정 목표(P2)
         p_goal = np.array(cfg["P2"]["pos"], dtype=float)
@@ -20,10 +22,12 @@ def make_env(rank, base_seed=42):
         task = RLTaskCfg(
             target_pos = p_goal,
             target_quat_wxyz = q_goal_wxyz,
-            episode_time = cfg["demo"]["move_duration"] + cfg["demo"]["hold_duration"],
+            # episode_time : 도달 전에 episode가 끝나면 학습이 꼬인다
+            episode_time = max(10.0, cfg["demo"]["move_duration"] + cfg["demo"]["hold_duration"]),
             ctrl_hz = cfg["control_hz"],
-            action_scale = np.array(cfg["ctrl"]["torque_limit"], dtype=float) * 0.5,  # 안전 스케일
-            pos_w=3.0, rot_w=2.0, torque_w=1e-4, smooth_w=5e-5,
+            # action_scale : 토크가 너무 작으면 이동 자체가 어렵다.
+            action_scale = np.array(cfg["ctrl"]["torque_limit"], dtype=float) * 0.8,
+            pos_w=13.0, rot_w=2.0, torque_w=1e-4, smooth_w=5e-5,
             success_pos_tol=2e-3, success_rot_tol_deg=1.0
         )
 
@@ -47,7 +51,7 @@ if __name__ == "__main__":
         cfg = yaml.safe_load(f)
     
     n_envs = 12  # 병렬 환경 개수
-    env = SubprocVecEnv([make_env(i) for i in range(n_envs)])
+    env = SubprocVecEnv([make_env(i, cfg) for i in range(n_envs)])
 
     model = SAC(
         "MlpPolicy", env,
@@ -56,13 +60,43 @@ if __name__ == "__main__":
         batch_size=256,
         gamma=0.98,
         train_freq=(n_envs, "step"),
-        gradient_steps=max(4, math.ceil(n_envs * 0.5)),
+        gradient_steps=max(6, math.ceil(n_envs * 0.75)),
+        # entropy coefficient : 엔트로피 목표를 약간 높게 잡아 초반 탐색을 늘린다. (기존 'auto'보다 강하게)
+        ent_coef="auto_0.1",
+        # learning_starts=10_000,            # 초기 랜덤 수집
         verbose=1,
         tensorboard_log="tb/",
         tau=0.02,                  # 타깃 폴리시 업데이트
         policy_kwargs=dict(net_arch=[256, 256])
     )
-    model.learn(total_timesteps=1_300_000)
+
+    # -------- 콜백들 연결 --------
+    TOTAL_STEPS = 3_000_000
+
+    # 평가용 환경(단일)
+    eval_env = DummyVecEnv([make_env(999, cfg, base_seed=1234)])
+
+    eval_cb = EvalCallback(
+        eval_env,
+        best_model_save_path="checkpoints/best",
+        log_path="eval",
+        eval_freq=10_000,          # 1만 스텝마다 1회 평가(기본 1 episode)
+        n_eval_episodes=3,
+        deterministic=True,
+        render=False
+    )
+
+    ckpt_cb = CheckpointCallback(
+        save_freq=50_000,
+        save_path="checkpoints",
+        name_prefix="sac_step"
+    )
+
+    pbar_cb = ProgressBarCallback(total_timesteps=TOTAL_STEPS, desc="SAC train")
+
+    callbacks = CallbackList([eval_cb, ckpt_cb, pbar_cb])
+
+    model.learn(total_timesteps=TOTAL_STEPS, callback=callbacks)
     os.makedirs("checkpoints", exist_ok=True)
     model.save("checkpoints/ur10e_sac")
 

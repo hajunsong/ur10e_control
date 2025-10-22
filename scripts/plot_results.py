@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.spatial.transform import Rotation as R
-
+import argparse
 
 def unwrap_deg(y_deg):
     y_rad = np.deg2rad(y_deg)
@@ -13,7 +13,12 @@ def wrap_deg(delta_deg):
     return (delta_deg + 180.0) % 360.0 - 180.0
 
 if __name__ == "__main__":
-    data = np.load("logs/run1.npz")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--log", type=str, default="logs/run1.npz",
+                        help="npz log path (default: logs/run1.npz)")
+    args = parser.parse_args()
+
+    data = np.load(args.log)
     t = data['t']
     x = data['x'] # Nx3
     xq_wxyz = data['xquat'] # Nx4 [w,x,y,z]
@@ -66,44 +71,44 @@ if __name__ == "__main__":
     plt.savefig("figures/orientation_rpy_tracking.png", dpi=200, bbox_inches="tight")
 
     # 위치 오차
-    plt.figure()
-    for i, label in enumerate(labels):
-        plt.plot(t, e_pos[:, i], label=f"e_{label} (m)")
-    plt.xlabel("time [s]");
-    plt.ylabel("Position error [m]")
-    plt.title("Position error (axis-wise)")
-    plt.legend(loc='best')
-    plt.tight_layout()
-    plt.savefig("figures/position_error_axis.png", dpi=200, bbox_inches="tight")
+    # plt.figure()
+    # for i, label in enumerate(labels):
+    #     plt.plot(t, e_pos[:, i], label=f"e_{label} (m)")
+    # plt.xlabel("time [s]");
+    # plt.ylabel("Position error [m]")
+    # plt.title("Position error (axis-wise)")
+    # plt.legend(loc='best')
+    # plt.tight_layout()
+    # plt.savefig("figures/position_error_axis.png", dpi=200, bbox_inches="tight")
 
-    plt.figure()
-    plt.plot(t, e_pos_norm, label="‖e_pos‖ (m)")
-    plt.xlabel("time [s]");
-    plt.ylabel("Position error norm [m]")
-    plt.title("Position error norm")
-    plt.legend(loc="best")
-    plt.tight_layout()
-    plt.savefig("figures/position_error_norm.png", dpi=200, bbox_inches="tight")
+    # plt.figure()
+    # plt.plot(t, e_pos_norm, label="‖e_pos‖ (m)")
+    # plt.xlabel("time [s]");
+    # plt.ylabel("Position error norm [m]")
+    # plt.title("Position error norm")
+    # plt.legend(loc="best")
+    # plt.tight_layout()
+    # plt.savefig("figures/position_error_norm.png", dpi=200, bbox_inches="tight")
 
-    # 자세 오차
-    plt.figure()
-    plt.plot(t, rot_err_deg, label="orientation error (angle) [deg]")
-    plt.xlabel("time [s]");
-    plt.ylabel("Angle error [deg]")
-    plt.title("Orientation error (quaternion angle)")
-    plt.legend(loc="best")
-    plt.tight_layout()
-    plt.savefig("figures/orientation_error_angle.png", dpi=200, bbox_inches="tight")
+    # # 자세 오차
+    # plt.figure()
+    # plt.plot(t, rot_err_deg, label="orientation error (angle) [deg]")
+    # plt.xlabel("time [s]");
+    # plt.ylabel("Angle error [deg]")
+    # plt.title("Orientation error (quaternion angle)")
+    # plt.legend(loc="best")
+    # plt.tight_layout()
+    # plt.savefig("figures/orientation_error_angle.png", dpi=200, bbox_inches="tight")
 
-    labels = ['roll (x)', 'pitch (y)', 'yaw (z)']
-    plt.figure()
-    for i, label in enumerate(labels):
-        plt.plot(t, e_rpy[:, i], label=f"e_{label} [deg]")
-    plt.xlabel("time [s]");
-    plt.ylabel("RPY error [deg]")
-    plt.title("Orientation error (RPY axis-wise)")
-    plt.legend(loc='best')
-    plt.tight_layout()
-    plt.savefig("figures/orientation_error_rpy.png", dpi=200, bbox_inches="tight")
+    # labels = ['roll (x)', 'pitch (y)', 'yaw (z)']
+    # plt.figure()
+    # for i, label in enumerate(labels):
+    #     plt.plot(t, e_rpy[:, i], label=f"e_{label} [deg]")
+    # plt.xlabel("time [s]");
+    # plt.ylabel("RPY error [deg]")
+    # plt.title("Orientation error (RPY axis-wise)")
+    # plt.legend(loc='best')
+    # plt.tight_layout()
+    # plt.savefig("figures/orientation_error_rpy.png", dpi=200, bbox_inches="tight")
 
-    plt.show()
+    # plt.show()
