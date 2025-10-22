@@ -114,6 +114,9 @@ class UR10eRLEnv(gym.Env):
     # --- Gym API ---
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
+        if seed is not None:
+            self.np_random = np.random.default_rng(seed)
+            
         self.data.qpos[:self.nq] = self.q0
         self.data.qvel[:] = 0.0
         mujoco.mj_forward(self.model, self.data)

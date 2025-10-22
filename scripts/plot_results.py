@@ -13,7 +13,7 @@ def wrap_deg(delta_deg):
     return (delta_deg + 180.0) % 360.0 - 180.0
 
 if __name__ == "__main__":
-    data = np.load("logs/run1.npz")
+    data = np.load("logs/eval_rl_run1.npz")
     t = data['t']
     x = data['x'] # Nx3
     xq_wxyz = data['xquat'] # Nx4 [w,x,y,z]
