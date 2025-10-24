@@ -97,7 +97,7 @@ class UR10eRLEnv(gym.Env):
         d_ang = (self._prev_ang_deg - ang_deg)
 
         # 스케일: m → cm, deg는 그대로
-        rew_improve = self.task.pos_w * (d_pos * 100.0) + self.task.rot_w * d_ang
+        rew_improve = self.task.pos_w * (d_pos) + self.task.rot_w * d_ang
 
         # 완만한 제약 (너무 크면 '가만히 있기'가 유리해짐)
         torque_cost  = self.task.torque_w * float(np.sum(u**2))
@@ -107,9 +107,11 @@ class UR10eRLEnv(gym.Env):
         # 성공 보너스 (크게 줘서 확실히 이득 만들기)
         bonus = 0.0
         if (pos_err < self.task.success_pos_tol and ang_deg < self.task.success_rot_tol_deg):
-            bonus = 5.0
+            bonus = 15.0
 
         reward = rew_improve - torque_cost - smooth_cost - time_penalty + bonus
+
+        reward = -np.exp(d_pos*d_pos) + -np.exp(d_ang*d_ang)
 
         # 🔹 반드시 업데이트
         self._prev_pos_err = pos_err
@@ -170,7 +172,7 @@ class UR10eRLEnv(gym.Env):
         tau_g = self.data.qfrc_inverse[:self.nu].copy()
 
         # u = np.clip(u + tau_g, -self.torque_limit, self.torque_limit)
-        u = u + tau_g
+        u = (u + tau_g)
 
         # 한 컨트롤 스텝 동안 물리 스텝
         self.data.ctrl[:] = u

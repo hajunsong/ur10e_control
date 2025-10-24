@@ -111,4 +111,4 @@ if __name__ == "__main__":
     # plt.tight_layout()
     # plt.savefig("figures/orientation_error_rpy.png", dpi=200, bbox_inches="tight")
 
-    # plt.show()
+    plt.show()
