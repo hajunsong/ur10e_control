@@ -169,7 +169,8 @@ class UR10eRLEnv(gym.Env):
         self.data.qvel[:] = qvel_backup
         tau_g = self.data.qfrc_inverse[:self.nu].copy()
 
-        u = np.clip(u + tau_g, -self.torque_limit, self.torque_limit)
+        # u = np.clip(u + tau_g, -self.torque_limit, self.torque_limit)
+        u = u + tau_g
 
         # 한 컨트롤 스텝 동안 물리 스텝
         self.data.ctrl[:] = u

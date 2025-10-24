@@ -31,7 +31,7 @@ if __name__ == "__main__":
         target_quat_wxyz = q_goal_wxyz,
         episode_time = cfg["demo"]["move_duration"] + cfg["demo"]["hold_duration"],
         ctrl_hz = cfg["control_hz"],
-        action_scale = np.array(cfg["ctrl"]["torque_limit"], dtype=float) * 0.5
+        action_scale = np.array(cfg["ctrl"]["torque_limit"], dtype=float) * 1.5
     )
 
     # 비디오 저장 (선택)
@@ -47,7 +47,7 @@ if __name__ == "__main__":
         torque_limit=np.array(cfg["ctrl"]["torque_limit"], dtype=float),
         task_cfg=task, render=True, width=480, height=640
     )
-    model = SAC.load("checkpoints/ur10e_sac")  # 경로/파일명은 학습 시 저장한 이름과 일치
+    model = SAC.load("checkpoints/best/best_model")  # 경로/파일명은 학습 시 저장한 이름과 일치
 
     # 로그 버퍼 (plot_results.py와 동일 키)  
     log = dict(t=[], x=[], xquat=[], x_des=[], xquat_des=[], x_rpy_deg=[], x_rpy_deg_des=[])

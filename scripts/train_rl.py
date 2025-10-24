@@ -27,7 +27,7 @@ def make_env(rank, cfg, base_seed=42):
             ctrl_hz = cfg["control_hz"],
             # action_scale : 토크가 너무 작으면 이동 자체가 어렵다.
             action_scale = np.array(cfg["ctrl"]["torque_limit"], dtype=float) * 0.8,
-            pos_w=13.0, rot_w=2.0, torque_w=1e-4, smooth_w=5e-5,
+            pos_w=3.0, rot_w=2.0, torque_w=1e-4, smooth_w=5e-5,
             success_pos_tol=2e-3, success_rot_tol_deg=1.0
         )
 
