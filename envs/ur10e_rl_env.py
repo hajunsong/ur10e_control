@@ -88,21 +88,43 @@ class UR10eRLEnv(gym.Env):
 
     def _reward(self, u):
         p_cur, q_cur_xyzw = self._site_pose(self.data)
-        p_err = self.task.target_pos - p_cur
-        r_err = self._rot_err_vec(q_cur_xyzw, self.target_xyzw)
-        ang_deg = np.linalg.norm(r_err) * 180.0/np.pi
+        p_err_vec = self.task.target_pos - p_cur
+        pos_err = float(np.linalg.norm(p_err_vec))
+        ang_deg = float(np.linalg.norm(self._rot_err_vec(q_cur_xyzw, self.target_xyzw)) * 180.0/np.pi)
 
-        rew = 0.0
-        rew -= self.task.pos_w * np.linalg.norm(p_err)
-        rew -= self.task.rot_w * ang_deg/180.0          # 0~1 정규화 느낌
-        rew -= self.task.torque_w * np.sum((u)**2)
-        rew -= self.task.smooth_w * np.sum((u - self._prev_u)**2)
+        # 🔹 오차 "감소량" 보상 (감소하면 +)
+        d_pos = (self._prev_pos_err - pos_err)
+        d_ang = (self._prev_ang_deg - ang_deg)
 
-        # 목표 도달 보너스
-        if (np.linalg.norm(p_err) < self.task.success_pos_tol and
-            ang_deg < self.task.success_rot_tol_deg):
-            rew += 1.0
-        return float(rew)
+        # 스케일: m → cm, deg는 그대로
+        rew_improve = self.task.pos_w * (d_pos * 1000.0) + self.task.rot_w * d_ang
+
+        # 완만한 제약 (너무 크면 '가만히 있기'가 유리해짐)
+        torque_cost  = self.task.torque_w * float(np.sum(u**2))
+        smooth_cost  = self.task.smooth_w * float(np.sum((u - self._prev_u)**2))
+        time_penalty = 1e-3  # 빨리 도달 유도
+
+        # 성공 보너스 (크게 줘서 확실히 이득 만들기)
+        bonus = 0.0
+        if (pos_err < self.task.success_pos_tol and ang_deg < self.task.success_rot_tol_deg):
+            bonus = 5.0
+
+        reward = rew_improve - torque_cost - smooth_cost - time_penalty + bonus
+
+        # 🔹 반드시 업데이트
+        self._prev_pos_err = pos_err
+        self._prev_ang_deg = ang_deg
+
+        return reward, {
+            "pos_err": pos_err,
+            "ang_err_deg": ang_deg,
+            "d_pos": d_pos,
+            "d_ang": d_ang,
+            "rew_improve": rew_improve,
+            "torque_cost": torque_cost,
+            "smooth_cost": smooth_cost,
+            "bonus": bonus
+        }
 
     def _terminated(self):
         p_cur, q_cur_xyzw = self._site_pose(self.data)
@@ -116,27 +138,39 @@ class UR10eRLEnv(gym.Env):
         super().reset(seed=seed)
         if seed is not None:
             self.np_random = np.random.default_rng(seed)
-            
+
         self.data.qpos[:self.nq] = self.q0
         self.data.qvel[:] = 0.0
         mujoco.mj_forward(self.model, self.data)
         self._step = 0
         self._prev_u[:] = 0.0
+        
+        self._prev_pos_err = None
+        self._prev_ang_deg = None
+        p_cur, q_cur_xyzw = self._site_pose(self.data)
+        p_err = self.task.target_pos - p_cur
+        ang_deg = np.linalg.norm(self._rot_err_vec(q_cur_xyzw, self.target_xyzw))*180.0/np.pi
+        self._prev_pos_err = float(np.linalg.norm(p_err))
+        self._prev_ang_deg = float(ang_deg)
+
         obs = self._obs()
         info = {"target_pos": self.task.target_pos.copy(),
                 "target_quat_wxyz": self.task.target_quat_wxyz.copy()}
+        
         return obs, info
 
     def step(self, action):
         action = np.asarray(action, dtype=float)
         u = np.clip(action, -1.0, 1.0) * self.task.action_scale
 
+        qvel_backup = self.data.qvel.copy()
         self.data.qvel[:] = 0.0  # 코리올리 제외(=순수 중력)
         mujoco.mj_rne(self.model, self.data, 0, self.data.qfrc_inverse)
-        tau = self.data.qfrc_inverse[:self.nu].copy()
+        # self.data.qvel[:] = qvel_backup
+        tau_g = self.data.qfrc_inverse[:self.nu].copy()
 
-        u = u + tau
-        u = np.clip(u, -self.torque_limit, self.torque_limit)
+        # u = np.clip(u + tau_g, -self.torque_limit, self.torque_limit)
+        u = u + tau_g
 
         # 한 컨트롤 스텝 동안 물리 스텝
         self.data.ctrl[:] = u
@@ -144,14 +178,20 @@ class UR10eRLEnv(gym.Env):
 
         self._step += 1
         obs = self._obs()
-        rew = self._reward(u)
+        rew, terms = self._reward(u)
         terminated = self._terminated()
         truncated = (self._step >= self.max_steps)
+        info = dict(terms)
+        if terminated or truncated:
+            info["episode"] = {
+                "r": float(rew),
+                "l": self._step,
+                "pos_err": terms.get('pos_err'),
+                "ang_err_deg": terms.get('ang_err_deg')
+            }
 
-        info = {}
         self._prev_u = u.copy()
-
-        return obs, rew, terminated, truncated, info
+        return obs, float(rew), terminated, truncated, info
 
     def render(self):
         if self.renderer is None:
