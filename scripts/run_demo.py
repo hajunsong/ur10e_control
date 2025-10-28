@@ -67,7 +67,7 @@ if __name__ == "__main__":
         t = (i+1) * dt
         s = minjerk(t, move_T)
         q_t = (1-s) * q_init + s * q_goal
-        q_traj.append(q_t)
+        q_traj.append(q_goal)
     for _ in range(int(np.ceil(hold_T/dt))):
         q_traj.append(q_goal.copy())
 

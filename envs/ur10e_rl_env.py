@@ -40,8 +40,10 @@ class UR10eRLEnv(gym.Env):
         self.dt = self.model.opt.timestep
         self.task = task_cfg
         self.torque_limit = np.asarray(torque_limit, dtype=float)
-        self.max_steps = int(np.ceil(self.task.episode_time / self.dt))
-        self.ctrl_every = max(1, int(round(self.task.ctrl_hz * self.dt)))  # 보통 1
+        # self.max_steps = int(np.ceil(self.task.episode_time / self.dt))
+        # self.ctrl_every = max(1, int(round(self.task.ctrl_hz * self.dt)))  # 보통 1
+        self.max_steps = int(np.ceil(self.task.episode_time * self.task.ctrl_hz))  # 제어 스텝 수
+        self.ctrl_every = max(1, int(round(1.0 / (self.task.ctrl_hz * self.dt))))  # 제어 1회당 물리 스텝 수
 
         # 렌더 옵션
         self.render_on = render
@@ -88,6 +90,7 @@ class UR10eRLEnv(gym.Env):
 
     def _reward(self, u):
         p_cur, q_cur_xyzw = self._site_pose(self.data)
+        
         p_err_vec = self.task.target_pos - p_cur
         pos_err = float(np.linalg.norm(p_err_vec))
         ang_deg = float(np.linalg.norm(self._rot_err_vec(q_cur_xyzw, self.target_xyzw)) * 180.0/np.pi)
@@ -109,9 +112,12 @@ class UR10eRLEnv(gym.Env):
         if (pos_err < self.task.success_pos_tol and ang_deg < self.task.success_rot_tol_deg):
             bonus = 15.0
 
-        reward = rew_improve - torque_cost - smooth_cost - time_penalty + bonus
-
-        reward = -np.exp(d_pos*d_pos) + -np.exp(d_ang*d_ang)
+        # 각도는 라디안으로 스케일하고, 위치/자세 오차는 적당한 스케일로 정규화
+        ang_rad = np.linalg.norm(self._rot_err_vec(q_cur_xyzw, self.target_xyzw))
+        pos_term = - (pos_err / 0.05)**2          # 5cm 스케일 (작업공간에 맞춰 조정)
+        rot_term = - (ang_rad / np.deg2rad(10))**2 # 10° 스케일
+        reward_dense = self.task.pos_w * pos_term + self.task.rot_w * rot_term
+        reward = rew_improve + reward_dense - torque_cost - smooth_cost - time_penalty + bonus
 
         # 🔹 반드시 업데이트
         self._prev_pos_err = pos_err
@@ -171,12 +177,12 @@ class UR10eRLEnv(gym.Env):
         self.data.qvel[:] = qvel_backup
         tau_g = self.data.qfrc_inverse[:self.nu].copy()
 
-        # u = np.clip(u + tau_g, -self.torque_limit, self.torque_limit)
-        u = (u + tau_g)
+        u = np.clip(u + tau_g, -self.torque_limit, self.torque_limit)
 
         # 한 컨트롤 스텝 동안 물리 스텝
         self.data.ctrl[:] = u
-        mujoco.mj_step(self.model, self.data)
+        for _ in range(self.ctrl_every):
+            mujoco.mj_step(self.model, self.data)
 
         self._step += 1
         obs = self._obs()

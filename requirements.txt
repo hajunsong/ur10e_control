@@ -8,3 +8,4 @@ yamlreader>=3.0
 stable-baselines3
 torch
 tensorboard
+tqdm

@@ -6,7 +6,7 @@ from envs.ur10e_rl_env import UR10eRLEnv, RLTaskCfg
 from utils.math_utils import wxyz_to_xyzw, xyzw_to_wxyz
 from stable_baselines3 import SAC
 from stable_baselines3.common.monitor import Monitor
-from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv
+from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv, VecNormalize
 import multiprocessing as mp
 import math
 from stable_baselines3.common.callbacks import CallbackList, EvalCallback, CheckpointCallback
@@ -26,9 +26,9 @@ def make_env(rank, cfg, base_seed=42):
             episode_time = max(10.0, cfg["demo"]["move_duration"] + cfg["demo"]["hold_duration"]),
             ctrl_hz = cfg["control_hz"],
             # action_scale : 토크가 너무 작으면 이동 자체가 어렵다.
-            action_scale = np.array(cfg["ctrl"]["torque_limit"], dtype=float) * 2.8,
-            pos_w=3.0, rot_w=2.0, torque_w=1e-4, smooth_w=5e-5,
-            success_pos_tol=2e-3, success_rot_tol_deg=1.0
+            action_scale = np.array(cfg["ctrl"]["torque_limit"], dtype=float) * 0.8,
+            pos_w=3.0, rot_w=3.0, torque_w=1e-4, smooth_w=5e-5,
+            success_pos_tol=0.001, success_rot_tol_deg=0.1,
         )
 
         env = UR10eRLEnv(
@@ -52,6 +52,7 @@ if __name__ == "__main__":
     
     n_envs = 12  # 병렬 환경 개수
     env = SubprocVecEnv([make_env(i, cfg) for i in range(n_envs)])
+    env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_reward=10.0)
 
     model = SAC(
         "MlpPolicy", env,
@@ -62,8 +63,8 @@ if __name__ == "__main__":
         train_freq=(n_envs, "step"),
         gradient_steps=max(6, math.ceil(n_envs * 0.75)),
         # entropy coefficient : 엔트로피 목표를 약간 높게 잡아 초반 탐색을 늘린다. (기존 'auto'보다 강하게)
-        ent_coef="auto_0.1",
-        # learning_starts=10_000,            # 초기 랜덤 수집
+        ent_coef="auto",
+        # learning_starts=20_000,            # 초기 랜덤 수집
         verbose=1,
         tensorboard_log="tb/",
         tau=0.02,                  # 타깃 폴리시 업데이트
@@ -71,10 +72,11 @@ if __name__ == "__main__":
     )
 
     # -------- 콜백들 연결 --------
-    TOTAL_STEPS = 3_000_000
+    TOTAL_STEPS = 15_000_000
 
-    # 평가용 환경(단일)
+    # 평가용 환경(단일) — 훈련과 같은 방식으로 감싸되, 학습(통계 업데이트) 비활성화
     eval_env = DummyVecEnv([make_env(999, cfg, base_seed=1234)])
+    eval_env = VecNormalize(eval_env, norm_obs=True, norm_reward=False, training=False)
 
     eval_cb = EvalCallback(
         eval_env,
@@ -99,5 +101,8 @@ if __name__ == "__main__":
     model.learn(total_timesteps=TOTAL_STEPS, callback=callbacks)
     os.makedirs("checkpoints", exist_ok=True)
     model.save("checkpoints/ur10e_sac")
+    # VecNormalize 통계 저장 (env가 VecNormalize로 감싸졌을 때만 가능)
+    if isinstance(env, VecNormalize):
+        env.save("checkpoints/vecnorm.pkl")
 
     env.close()

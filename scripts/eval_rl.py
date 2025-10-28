@@ -5,6 +5,7 @@ import yaml, numpy as np, imageio.v2 as imageio
 from scipy.spatial.transform import Rotation as R
 
 from envs.ur10e_rl_env import UR10eRLEnv, RLTaskCfg
+from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from utils.math_utils import wxyz_to_xyzw, xyzw_to_wxyz
 from stable_baselines3 import SAC
 
@@ -40,28 +41,48 @@ if __name__ == "__main__":
     vw = imageio.get_writer("ur10e_rl_eval.mp4", fps=cfg["render_hz"])
 
     # 환경/모델
-    env = UR10eRLEnv(
-        xml_path=cfg["mujoco_xml"],
-        end_effector_site=cfg["end_effector_site"],
-        q0=np.array(cfg["q0"], dtype=float),
-        torque_limit=np.array(cfg["ctrl"]["torque_limit"], dtype=float),
-        task_cfg=task, render=True, width=480, height=640
-    )
-    model = SAC.load("checkpoints/best/best_model")  # 경로/파일명은 학습 시 저장한 이름과 일치
+    def make_eval_env():
+        return UR10eRLEnv(
+            xml_path=cfg["mujoco_xml"],
+            end_effector_site=cfg["end_effector_site"],
+            q0=np.array(cfg["q0"], dtype=float),
+            torque_limit=np.array(cfg["ctrl"]["torque_limit"], dtype=float),
+            task_cfg=task, render=True, width=480, height=640
+        )
+    base_vec = DummyVecEnv([make_eval_env])
+    # 학습 시 저장한 VecNormalize 통계 사용(없다면 새로 감싸도 됨)
+    if os.path.exists("checkpoints/vecnorm.pkl"):
+        eval_env = VecNormalize.load("checkpoints/vecnorm.pkl", base_vec)
+    else:
+        eval_env = VecNormalize(base_vec, norm_obs=True, norm_reward=False)
+    eval_env.training = False
+    eval_env.norm_reward = False
+    raw = eval_env.venv.envs[0]   # (Monitor가 껴있다면 raw = raw.env)
+
+    model = SAC.load("checkpoints/ur10e_sac")
+    # model = SAC.load("checkpoints/best/best_model")
+    # model = SAC.load("checkpoints/sac_step_3000000_steps")
 
     # 로그 버퍼 (plot_results.py와 동일 키)  
     log = dict(t=[], x=[], xquat=[], x_des=[], xquat_des=[], x_rpy_deg=[], x_rpy_deg_des=[])
 
-    obs, info = env.reset(seed=123)
+    obs = eval_env.reset()
+
     t = 0.0
-    dt = env.dt
+    dt = raw.dt
     step_idx = 0
-    while True:
+    done = False
+    while not done:
         act, _ = model.predict(obs, deterministic=True)
-        obs, rew, term, trunc, info = env.step(act)
+        obs, rews, dones, infos = eval_env.step(act)
+        rew = float(rews[0])
+        done = bool(dones[0])
+
+        if done:
+            break
 
         # 현재 포즈
-        pos, quat_wxyz, rpy_deg = site_pose(env.model, env.data, env.ee_id)
+        pos, quat_wxyz, rpy_deg = site_pose(raw.model, raw.data, raw.ee_id)
         # 목표 포즈(RPY)
         q_goal_xyzw_local = wxyz_to_xyzw(q_goal_wxyz)  # [x,y,z,w]
         rpy_goal_deg = R.from_quat(q_goal_xyzw_local).as_euler('xyz', degrees=True)
@@ -87,17 +108,15 @@ if __name__ == "__main__":
             print(f"Tgt Ori (wxyz): {q_goal_wxyz[0]: .4f}, {q_goal_wxyz[1]: .4f}, {q_goal_wxyz[2]: .4f}, {q_goal_wxyz[3]: .4f}")
 
         # 렌더 프레임 저장
-        frame = env.render()
+        frame = raw.render()
         if frame is not None:
             vw.append_data(frame)
 
         t += dt
         step_idx += 1
-        if term or trunc:
-            break
 
     vw.close()
-    env.close()
+    eval_env.close()
 
     # numpy 변환 및 저장
     for k in log:
