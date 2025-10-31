@@ -50,6 +50,7 @@ if __name__ == "__main__":
     for i, label in enumerate(labels):
         plt.plot(t, x[:, i], label=f"{label}(current)")
         plt.plot(t, x_des[:, i], linestyle="--", label='x(target)')
+    plt.grid()
     plt.xlabel('time [s]')
     plt.ylabel('EE position [m]')
     plt.legend(loc='center left', bbox_to_anchor=(1.02, 0.8))
@@ -63,6 +64,7 @@ if __name__ == "__main__":
     for i, label in enumerate(labels):
         plt.plot(t, x_rpy_plot[:, i], label=f"{labels[i]}(current)")
         plt.plot(t, x_rpy_des_plot[:, i], linestyle="--", label=f"{labels[i]}(target)")
+    plt.grid()
     plt.xlabel('time [s]')
     plt.ylabel('RPY [deg]')
     plt.legend(loc='center left', bbox_to_anchor=(1.02, 0.8))
@@ -71,24 +73,26 @@ if __name__ == "__main__":
     plt.savefig("figures/orientation_rpy_tracking.png", dpi=200, bbox_inches="tight")
 
     # 위치 오차
-    # plt.figure()
-    # for i, label in enumerate(labels):
-    #     plt.plot(t, e_pos[:, i], label=f"e_{label} (m)")
-    # plt.xlabel("time [s]");
-    # plt.ylabel("Position error [m]")
-    # plt.title("Position error (axis-wise)")
-    # plt.legend(loc='best')
-    # plt.tight_layout()
-    # plt.savefig("figures/position_error_axis.png", dpi=200, bbox_inches="tight")
+    plt.figure()
+    for i, label in enumerate(labels):
+        plt.plot(t, e_pos[:, i], label=f"e_{label} (deg)")
+    plt.grid()
+    plt.xlabel("time [s]");
+    plt.ylabel("Orientation error [deg]")
+    plt.title("Orientation error (axis-wise)")
+    plt.legend(loc='best')
+    plt.tight_layout()
+    plt.savefig("figures/orientation_error_axis.png", dpi=200, bbox_inches="tight")
 
-    # plt.figure()
-    # plt.plot(t, e_pos_norm, label="‖e_pos‖ (m)")
-    # plt.xlabel("time [s]");
-    # plt.ylabel("Position error norm [m]")
-    # plt.title("Position error norm")
-    # plt.legend(loc="best")
-    # plt.tight_layout()
-    # plt.savefig("figures/position_error_norm.png", dpi=200, bbox_inches="tight")
+    plt.figure()
+    plt.plot(t, e_pos_norm, label="‖e_pos‖ (m)")
+    plt.grid()
+    plt.xlabel("time [s]");
+    plt.ylabel("Position error norm [m]")
+    plt.title("Position error norm")
+    plt.legend(loc="best")
+    plt.tight_layout()
+    plt.savefig("figures/position_error_norm.png", dpi=200, bbox_inches="tight")
 
     # # 자세 오차
     # plt.figure()

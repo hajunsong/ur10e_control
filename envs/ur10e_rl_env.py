@@ -76,7 +76,8 @@ class UR10eRLEnv(gym.Env):
 
     def _rot_err_vec(self, q_cur_xyzw, q_tar_xyzw):
         # 회전벡터(라디안)
-        qc = R.from_quat(q_cur_xyzw); qt = R.from_quat(q_tar_xyzw)
+        qc = R.from_quat(q_cur_xyzw)
+        qt = R.from_quat(q_tar_xyzw)
         rv = (qt * qc.inv()).as_rotvec()
         return rv
 
@@ -139,7 +140,7 @@ class UR10eRLEnv(gym.Env):
         p_err = self.task.target_pos - p_cur
         ang_deg = np.linalg.norm(self._rot_err_vec(q_cur_xyzw, self.target_xyzw)) * 180.0/np.pi
         return (np.linalg.norm(p_err) < self.task.success_pos_tol and
-                ang_deg < self.task.success_rot_tol_deg)
+                (ang_deg) < self.task.success_rot_tol_deg)
 
     # --- Gym API ---
     def reset(self, seed=None, options=None):

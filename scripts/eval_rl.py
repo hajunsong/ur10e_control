@@ -32,7 +32,8 @@ if __name__ == "__main__":
         target_quat_wxyz = q_goal_wxyz,
         episode_time = cfg["demo"]["move_duration"] + cfg["demo"]["hold_duration"],
         ctrl_hz = cfg["control_hz"],
-        action_scale = np.array(cfg["ctrl"]["torque_limit"], dtype=float) * 1.5
+        action_scale = np.array(cfg["ctrl"]["torque_limit"], dtype=float) * 1.5,
+        success_pos_tol=0.001, success_rot_tol_deg=0.1,
     )
 
     # 비디오 저장 (선택)
@@ -79,6 +80,7 @@ if __name__ == "__main__":
         done = bool(dones[0])
 
         if done:
+            print(f"done step : {step_idx}")
             break
 
         # 현재 포즈

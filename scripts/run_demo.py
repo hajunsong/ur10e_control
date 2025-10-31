@@ -21,9 +21,9 @@ if __name__ == "__main__":
     vw = imageio.get_writer(cfg['demo']['video_path'], fps=cfg['render_hz'])
 
     ctrl_cfg = CtrlCfg(
-        kp=np.array(cfg['ctrl']['kp'], dtype=float),
-        kd=np.array(cfg['ctrl']['kd'], dtype=float),
-        torque_limit=np.array(cfg['ctrl']['torque_limit'], dtype=float),
+        kp=np.array(cfg['ctrl']['kp'], dtype=float)*12.0,
+        kd=np.array(cfg['ctrl']['kd'], dtype=float)*5.5,
+        torque_limit=np.array(cfg['ctrl']['torque_limit'], dtype=float) * 1.5,
         use_gravity_comp=bool(cfg['ctrl']['use_gravity_comp'])
     )
 
@@ -67,6 +67,7 @@ if __name__ == "__main__":
         t = (i+1) * dt
         s = minjerk(t, move_T)
         q_t = (1-s) * q_init + s * q_goal
+        # q_traj.append(q_t)
         q_traj.append(q_goal)
     for _ in range(int(np.ceil(hold_T/dt))):
         q_traj.append(q_goal.copy())
