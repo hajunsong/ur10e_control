@@ -42,3 +42,12 @@ demo:
   hold_duration: 1.0 # 도달 후 유지 시간 [s]
   video_path: "ur10e_demo.mp4"
   log_path: "logs/run1.npz"
+
+# VSD
+vsd:
+  use_vsd: True
+  vsd_alpha: 1.0
+  Kp_vsd_pos: 1200.0
+  Kd_vsd_pos: 50.0
+  Kp_vsd_rot: 80.0
+  Kd_vsd_rot: 6.0

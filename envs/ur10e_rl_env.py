@@ -6,6 +6,7 @@ from gymnasium import spaces
 import mujoco
 from dataclasses import dataclass
 from scipy.spatial.transform import Rotation as R
+from utils.math_utils import wxyz_to_xyzw, xyzw_to_wxyz
 
 @dataclass
 class RLTaskCfg:
@@ -20,6 +21,13 @@ class RLTaskCfg:
     smooth_w: float = 5e-5      # 액션 변화율 패널티
     success_pos_tol: float = 2e-3   # [m]
     success_rot_tol_deg: float = 1.0# [deg]
+    # VSD option
+    use_vsd: bool = True
+    vsd_alpha: float = 0.3  # policy 대비 VSD 가중치 (0~1)
+    Kp_vsd_pos: float = 1500.0  # [N/m]
+    Kd_vsd_pos: float = 60.0  # [N·s/m]
+    Kp_vsd_rot: float = 100.0  # [N·m/rad]
+    Kd_vsd_rot: float = 8.0  # [N·m·s/rad]
 
 class UR10eRLEnv(gym.Env):
     metadata = {"render_modes": ["rgb_array"], "render_fps": 25}
@@ -67,6 +75,8 @@ class UR10eRLEnv(gym.Env):
                                      self.task.target_quat_wxyz[3],
                                      self.task.target_quat_wxyz[0]], dtype=float)
 
+        self._rng = np.random.default_rng()
+
     # --- 유틸 ---
     def _site_pose(self, data):
         p = data.site_xpos[self.ee_id].copy()
@@ -100,8 +110,15 @@ class UR10eRLEnv(gym.Env):
         d_pos = (self._prev_pos_err - pos_err)
         d_ang = (self._prev_ang_deg - ang_deg)
 
-        # 스케일: m → cm, deg는 그대로
-        rew_improve = self.task.pos_w * (d_pos) + self.task.rot_w * d_ang
+        # 특성 스케일로 무차원화
+        d_ang_rad = np.deg2rad(d_ang)
+        # pos_scale = 0.01  # 1 cm = '1'
+        # ang_scale = np.deg2rad(5.0)  # 5 deg = '1'
+        # rew_improve = self.task.pos_w * (d_pos / pos_scale) + self.task.rot_w * (d_ang_rad / ang_scale)
+
+        # rew_improve = self.task.pos_w * (d_pos) + self.task.rot_w * d_ang
+
+        rew_improve = self.task.pos_w*d_pos*0.01 + self.task.rot_w*d_ang_rad
 
         # 완만한 제약 (너무 크면 '가만히 있기'가 유리해짐)
         torque_cost  = self.task.torque_w * float(np.sum(u**2))
@@ -142,11 +159,54 @@ class UR10eRLEnv(gym.Env):
         return (np.linalg.norm(p_err) < self.task.success_pos_tol and
                 (ang_deg) < self.task.success_rot_tol_deg)
 
+    def _tau_vsd(self):
+        """Task-space Virtual Spring-Damper -> joint torque"""
+        # EE pose
+        x_cur = self.data.site_xpos[self.ee_id].copy()
+        mat = self.data.site_xmat[self.ee_id].reshape(3, 3).copy()
+        quat_xyzw = R.from_matrix(mat).as_quat()  # [x,y,z,w]
+
+        # 목표 pose
+        x_des = self.task.target_pos
+        q_des_xyzw = wxyz_to_xyzw(self.task.target_quat_wxyz)
+
+        # 위치/자세 오차
+        pos_err = x_des - x_cur
+        rot_err = R.from_quat(q_des_xyzw) * R.from_quat(quat_xyzw).inv()
+        rot_vec = rot_err.as_rotvec()  # [rad] 회전벡터
+
+        # Jacobian (6×n)
+        Jp = np.zeros((3, self.model.nv))
+        Jr = np.zeros((3, self.model.nv))
+        mujoco.mj_jacSite(self.model, self.data, Jp, Jr, self.ee_id)
+        J = np.vstack([Jp, Jr])
+
+        # EE 속도
+        ee_vel = J @ self.data.qvel
+
+        # Gains
+        Kp = np.diag([self.task.Kp_vsd_pos] * 3 + [self.task.Kp_vsd_rot] * 3)
+        Kd = np.diag([self.task.Kd_vsd_pos] * 3 + [self.task.Kd_vsd_rot] * 3)
+
+        e6 = np.hstack([pos_err, rot_vec])
+        F_vsd = Kp @ e6 - Kd @ ee_vel  # (6,)
+        tau_vsd = J.T @ F_vsd  # (n,)
+
+        # 수치 안전 (클립)
+        tau_vsd = np.clip(tau_vsd, -self.torque_limit, self.torque_limit)
+        return tau_vsd
+
     # --- Gym API ---
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         if seed is not None:
-            self.np_random = np.random.default_rng(seed)
+            # self.np_random = np.random.default_rng(seed)
+            super().reset(seed=seed)
+            # 내부 샘플러용도 동일 시드로 동기화
+            self._rng = np.random.default_rng(seed)
+            # (선택) action/observation space도 시딩
+            if hasattr(self, "action_space"):  self.action_space.seed(seed)
+            if hasattr(self, "observation_space"): self.observation_space.seed(seed)
 
         self.data.qpos[:self.nq] = self.q0
         self.data.qvel[:] = 0.0
@@ -170,7 +230,7 @@ class UR10eRLEnv(gym.Env):
 
     def step(self, action):
         action = np.asarray(action, dtype=float)
-        u = np.clip(action, -1.0, 1.0) * self.task.action_scale
+        u_pol = np.clip(action, -1.0, 1.0) * self.task.action_scale
 
         qvel_backup = self.data.qvel.copy()
         self.data.qvel[:] = 0.0  # 코리올리 제외(=순수 중력)
@@ -178,7 +238,13 @@ class UR10eRLEnv(gym.Env):
         self.data.qvel[:] = qvel_backup
         tau_g = self.data.qfrc_inverse[:self.nu].copy()
 
-        u = np.clip(u + tau_g, -self.torque_limit, self.torque_limit)
+        # VSD (학습/평가 공통 반영)
+        tau_vsd = self._tau_vsd() if getattr(self.task, "use_vsd", False) else 0.0
+
+        # 합성 토크
+        alpha = getattr(self.task, "vsd_alpha", 0.3)  # 0~1
+        u = u_pol + tau_g + alpha * tau_vsd
+        u = np.clip(u, -self.torque_limit, self.torque_limit)
 
         # 한 컨트롤 스텝 동안 물리 스텝
         self.data.ctrl[:] = u
@@ -191,10 +257,23 @@ class UR10eRLEnv(gym.Env):
         terminated = self._terminated()
         truncated = (self._step >= self.max_steps)
         info = dict(terms)
+
+        # 로깅 보강: 토크 성분 RMS
+        info["tau/policy_rms"] = float(np.sqrt(np.mean(u_pol ** 2)))
+        info["tau/vsd_rms"] = float(np.sqrt(np.mean((alpha * tau_vsd) ** 2)))
+        info["tau/gravity_rms"] = float(np.sqrt(np.mean(tau_g ** 2)))
+        info["tau/u1"] = float(u[0])
+        info["tau/u2"] = float(u[1])
+        info["tau/u3"] = float(u[2])
+        info["tau/u4"] = float(u[3])
+        info["tau/u5"] = float(u[4])
+        info["tau/u6"] = float(u[5])
+
+
         if terminated or truncated:
             info["episode"] = {
                 "r": float(rew),
-                "l": self._step,
+                "l": int(self._step),
                 "pos_err": terms.get('pos_err'),
                 "ang_err_deg": terms.get('ang_err_deg')
             }

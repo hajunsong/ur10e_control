@@ -9,3 +9,4 @@ stable-baselines3
 torch
 tensorboard
 tqdm
+imageio[ffmpeg]

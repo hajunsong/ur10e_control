@@ -76,26 +76,21 @@ def plot_positions(logA, logB, nameA, nameB, outdir, prefix):
     xdA, xdB = logA["x_des"], logB["x_des"]
 
     labels = ['x','y','z']
-    plt.figure(figsize=(10,6))
+    plt.figure(figsize=(8,6))
     for i, lab in enumerate(labels):
-        # current
-        lA, = plt.plot(tA, xA[:,i], label=f"{lab} current ({nameA})")
-        color = lA.get_color()
-        # target (A) - dashed same color
-        # plt.plot(tA, xdA[:,i], ls='--', color=color, label=f"{lab} target ({nameA})")
-
+        # current A
+        plt.plot(tA, xA[:,i], color='#FF7F00', label=f"{lab} current ({nameA})")
         # current B
-        lB, = plt.plot(tB, xB[:,i], label=f"{lab} current ({nameB})")
-        colorB = lB.get_color()
-        # target (B)
-        plt.plot(tB, xdB[:,i], ls='--', color=colorB, label=f"{lab} target")
+        plt.plot(tB, xB[:,i], color='#007FFF', label=f"{lab} current ({nameB})")
+        # target
+        plt.plot(tB, xdB[:,i], ls='--', color='#FFDF80', label=f"{lab} target")
 
     plt.xlabel("time [s]")
     plt.ylabel("position [m]")
-    plt.title("EE Position Tracking (IK vs RL)")
-    plt.legend(loc='center left', bbox_to_anchor=(1.02, 0.5))
-    plt.tight_layout()
+    plt.title(f"EE Position Tracking ({nameA} vs {nameB})")
+    plt.legend(loc='upper right')
     plt.grid()
+    plt.xlim(0, 1.0)
     ensure_dir(outdir)
     path = os.path.join(outdir, f"{prefix}_position.png")
     plt.savefig(path, dpi=150, bbox_inches='tight')
@@ -124,22 +119,18 @@ def plot_rpy(logA, logB, nameA, nameB, outdir, prefix):
         rpyB_des = logB["x_rpy_deg_des"]
 
     labels = ['roll','pitch','yaw']
-    plt.figure(figsize=(10,6))
+    plt.figure(figsize=(8,6))
     for i, lab in enumerate(labels):
-        lA, = plt.plot(tA, rpyA[:,i], label=f"{lab} current ({nameA})")
-        color = lA.get_color()
-        # plt.plot(tA, rpyA_des[:,i], ls='--', color=color, label=f"{lab} target ({nameA})")
-
-        lB, = plt.plot(tB, rpyB[:,i], label=f"{lab} current ({nameB})")
-        colorB = lB.get_color()
-        plt.plot(tB, rpyB_des[:,i], ls='--', color=colorB, label=f"{lab} target")
+        plt.plot(tA, rpyA[:,i], color='#FF7F00', label=f"{lab} current ({nameA})")
+        plt.plot(tB, rpyB[:,i], color='#007FFF', label=f"{lab} current ({nameB})")
+        plt.plot(tB, rpyB_des[:,i], ls='--', color='#FFDF80', label=f"{lab} target")
 
     plt.xlabel("time [s]")
     plt.ylabel("RPY [deg]")
-    plt.title("EE Orientation (RPY) Tracking (IK vs RL)")
-    plt.legend(loc='center left', bbox_to_anchor=(1.02, 0.5))
-    plt.tight_layout()
+    plt.title(f"EE Orientation (RPY) Tracking ({nameA} vs {nameB})")
+    plt.legend()
     plt.grid()
+    plt.xlim(0, 1.0)
     ensure_dir(outdir)
     path = os.path.join(outdir, f"{prefix}_rpy.png")
     plt.savefig(path, dpi=150, bbox_inches='tight', bbox_extra_artists=[])
@@ -150,32 +141,36 @@ def plot_errors(logA, logB, nameA, nameB, outdir, prefix):
     posA, posB = logA["pos_err"], logB["pos_err"]
     rotA, rotB = logA["rot_err"], logB["rot_err"]
 
-    plt.figure(figsize=(10,6))
-    l1, = plt.plot(tA, posA*1000.0, label=f"pos err (mm) {nameA}")
-    c1 = l1.get_color()
-    plt.plot(tA, rotA, ls='--', color=c1, label=f"rot err (deg) {nameA}")
+    fig, axes = plt.subplots(2, 1, figsize=(8, 6))
+    axes[0].plot(tA, posA, color='#FF7F00', label=f"pos err (m) {nameA}")
+    axes[0].plot(tB, posB, ls='--', color='#007FFF', label=f"pos err (m) {nameB}")
+    axes[0].set_xlabel("time [s]")
+    axes[0].set_ylabel("error")
+    axes[0].set_title(f"Position Error ({nameA} vs {nameB})")
+    axes[0].legend()
+    axes[0].grid()
+    axes[0].set_xlim(0, 1.0)
 
-    l2, = plt.plot(tB, posB*1000.0, label=f"pos err (mm) {nameB}")
-    c2 = l2.get_color()
-    plt.plot(tB, rotB, ls='--', color=c2, label=f"rot err (deg) {nameB}")
+    axes[1].plot(tA, rotA, color='#FF7F00', label=f"rot err (deg) {nameA}")
+    axes[1].plot(tB, rotB, ls='--', color='#007FFF', label=f"rot err (deg) {nameB}")
+    axes[1].set_xlabel("time [s]")
+    axes[1].set_ylabel("error")
+    axes[1].set_title(f"Orientation Error ({nameA} vs {nameB})")
+    axes[1].legend()
+    axes[1].grid()
+    axes[1].set_xlim(0, 1.0)
 
-    plt.xlabel("time [s]")
-    plt.ylabel("error")
-    plt.title("Position / Orientation Error (IK vs RL)")
-    plt.legend(loc='center left', bbox_to_anchor=(1.02, 0.5))
-    plt.tight_layout()
-    plt.grid()
     ensure_dir(outdir)
     path = os.path.join(outdir, f"{prefix}_errors.png")
     plt.savefig(path, dpi=150, bbox_inches='tight')
     print(f"Saved figure: {path}")
 
-def main():
+def run():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--a", type=str, default="logs/run1.npz", help="log A (e.g., run_demo)")
-    parser.add_argument("--b", type=str, default="logs/eval_rl_run1.npz", help="log B (e.g., eval_rl)")
-    parser.add_argument("--nameA", type=str, default="IK")
-    parser.add_argument("--nameB", type=str, default="RL")
+    parser.add_argument("--a", type=str, default="logs/eval_rl_run1_fix.npz", help="log A (e.g., run_demo)")
+    parser.add_argument("--b", type=str, default="logs/eval_rl_run1_vsd.npz", help="log B (e.g., eval_rl)")
+    parser.add_argument("--nameA", type=str, default="RL")
+    parser.add_argument("--nameB", type=str, default="RL+VSD")
     parser.add_argument("--outdir", type=str, default="figures")
     parser.add_argument("--prefix", type=str, default="compare")
     parser.add_argument("--show", action="store_true")
@@ -193,7 +188,8 @@ def main():
     plot_rpy(logA, logB, args.nameA, args.nameB, args.outdir, args.prefix)
     plot_errors(logA, logB, args.nameA, args.nameB, args.outdir, args.prefix)
 
+    plt.tight_layout()
     plt.show()
 
 if __name__ == "__main__":
-    main()
+    run()

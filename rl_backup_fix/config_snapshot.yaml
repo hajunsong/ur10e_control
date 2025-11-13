@@ -1,0 +1,78 @@
+P2:
+  pos:
+  - -0.85
+  - -0.2
+  - 0.45
+  quat:
+  - -0.5
+  - 0.5
+  - 0.5
+  - -0.5
+control_hz: 250
+ctrl:
+  kd:
+  - 8
+  - 8
+  - 6
+  - 4
+  - 3
+  - 2
+  kp:
+  - 150
+  - 150
+  - 120
+  - 80
+  - 60
+  - 40
+  torque_limit:
+  - 150
+  - 150
+  - 100
+  - 60
+  - 40
+  - 40
+  use_gravity_comp: true
+demo:
+  hold_duration: 1.0
+  log_path: logs/run1.npz
+  move_duration: 4.0
+  video_path: ur10e_demo.mp4
+end_effector_site: ee_site
+ik:
+  damping: 0.001
+  dt_limit: 0.05
+  max_iters: 200
+  pos_tol: 0.0001
+  rot_tol: 0.001
+  step_size: 0.6
+mujoco_xml: /home/keti/ur10e_control4/assets/ur10e/scene.xml
+q0:
+- 0.0
+- -1.57
+- 1.57
+- -1.57
+- -1.57
+- 0.0
+render_hz: 60
+sim_substeps: 1
+torso_body: base
+traj:
+  path_follow: false
+  path_num_wp: 6
+  path_segment_T: 1.2
+  workspace_max:
+  - -0.5
+  - 0.2
+  - 0.85
+  workspace_min:
+  - -0.9
+  - -0.4
+  - 0.45
+  yaw_range_deg: 180.0
+vsd:
+  Kd_vsd_pos: 50.0
+  Kd_vsd_rot: 6.0
+  Kp_vsd_pos: 1200.0
+  Kp_vsd_rot: 80.0
+  use_vsd: false
+  vsd_alpha: 1.0

@@ -9,6 +9,7 @@ from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from utils.math_utils import wxyz_to_xyzw, xyzw_to_wxyz
 from stable_baselines3 import SAC
 
+import scripts.compare_results as result_plot
 
 def site_pose(model, data, ee_id):
     pos = data.site_xpos[ee_id].copy()
@@ -32,14 +33,21 @@ if __name__ == "__main__":
         target_quat_wxyz = q_goal_wxyz,
         episode_time = cfg["demo"]["move_duration"] + cfg["demo"]["hold_duration"],
         ctrl_hz = cfg["control_hz"],
-        action_scale = np.array(cfg["ctrl"]["torque_limit"], dtype=float) * 1.5,
+        action_scale = np.array(cfg["ctrl"]["torque_limit"], dtype=float),
         success_pos_tol=0.001, success_rot_tol_deg=0.1,
+        # VSD on
+        use_vsd=cfg["vsd"]["use_vsd"],
+        vsd_alpha=cfg["vsd"]["vsd_alpha"],
+        Kp_vsd_pos=cfg["vsd"]["Kp_vsd_pos"],
+        Kd_vsd_pos=cfg["vsd"]["Kd_vsd_pos"],
+        Kp_vsd_rot=cfg["vsd"]["Kp_vsd_rot"],
+        Kd_vsd_rot=cfg["vsd"]["Kd_vsd_rot"],
     )
 
     # 비디오 저장 (선택)
     os.makedirs("logs", exist_ok=True)
     os.makedirs("figures", exist_ok=True)
-    vw = imageio.get_writer("ur10e_rl_eval.mp4", fps=cfg["render_hz"])
+    vw = imageio.get_writer("ur10e_rl_eval_vsd.mp4", fps=cfg["render_hz"])
 
     # 환경/모델
     def make_eval_env():
@@ -52,22 +60,32 @@ if __name__ == "__main__":
         )
     base_vec = DummyVecEnv([make_eval_env])
     # 학습 시 저장한 VecNormalize 통계 사용(없다면 새로 감싸도 됨)
-    if os.path.exists("checkpoints/vecnorm.pkl"):
-        eval_env = VecNormalize.load("checkpoints/vecnorm.pkl", base_vec)
+
+    RUN = "runs/20251113_044801_rl_fix"
+    ckpt = f"{RUN}/checkpoints/best/best_model.zip"
+    vecnorm = f"{RUN}/checkpoints/best/vecnorm.pkl"
+
+    if os.path.exists(vecnorm):
+        eval_env = VecNormalize.load(vecnorm, base_vec)
     else:
-        eval_env = VecNormalize(base_vec, norm_obs=True, norm_reward=False)
+        eval_env = base_vec
     eval_env.training = False
     eval_env.norm_reward = False
     raw = eval_env.venv.envs[0]   # (Monitor가 껴있다면 raw = raw.env)
 
-    model = SAC.load("checkpoints/ur10e_sac")
-    # model = SAC.load("checkpoints/best/best_model")
-    # model = SAC.load("checkpoints/sac_step_3000000_steps")
+    model = SAC.load(ckpt)
 
     # 로그 버퍼 (plot_results.py와 동일 키)  
     log = dict(t=[], x=[], xquat=[], x_des=[], xquat_des=[], x_rpy_deg=[], x_rpy_deg_des=[])
 
     obs = eval_env.reset()
+
+    import mujoco
+    mujoco.mj_forward(raw.model, raw.data)
+
+    # 목표 포즈(RPY)
+    q_goal_xyzw_local = wxyz_to_xyzw(q_goal_wxyz)  # [x,y,z,w]
+    rpy_goal_deg = R.from_quat(q_goal_xyzw_local).as_euler('xyz', degrees=True)
 
     t = 0.0
     dt = raw.dt
@@ -85,9 +103,6 @@ if __name__ == "__main__":
 
         # 현재 포즈
         pos, quat_wxyz, rpy_deg = site_pose(raw.model, raw.data, raw.ee_id)
-        # 목표 포즈(RPY)
-        q_goal_xyzw_local = wxyz_to_xyzw(q_goal_wxyz)  # [x,y,z,w]
-        rpy_goal_deg = R.from_quat(q_goal_xyzw_local).as_euler('xyz', degrees=True)
 
         # 로그 누적 (타겟을 매 스텝 동일하게 기록)
         log['t'].append(t)
@@ -123,7 +138,9 @@ if __name__ == "__main__":
     # numpy 변환 및 저장
     for k in log:
         log[k] = np.asarray(log[k])
-    np.savez("logs/eval_rl_run1.npz", **log, p_goal=p_goal, q_goal_xyzw=q_goal_xyzw)
+    np.savez("logs/eval_rl_run1_vsd.npz", **log, p_goal=p_goal, q_goal_xyzw=q_goal_xyzw)
 
-    print("Saved video to ur10e_rl_eval.mp4")
-    print("Saved logs  to logs/eval_rl_run1.npz")
+    print("Saved video to ur10e_rl_eval_vsd.mp4")
+    print("Saved logs  to logs/eval_rl_run1_vsd.npz")
+
+    result_plot.run()
